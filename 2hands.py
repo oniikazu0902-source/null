@@ -40,7 +40,7 @@ except OSError:
 # 3. カメラの準備
 # ==========================================
 cap = cv2.VideoCapture(0)
-current_notes = None
+current_notes = {'Right':None, 'Left':None}
 
 print("カメラに向かって手をかざしてください。Escキーで終了します。")
 
