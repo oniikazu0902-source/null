@@ -91,8 +91,8 @@ while cap.isOpened():
     # ==========================================
     # 4. 手の位置から音程を計算してMIDI送信
     # ==========================================
-    if detection_result.hand_landmarks and detection_result.hand_handedness:
-        for hand_landmarks, handedness in zip(detection_result.hand_landmarks, detection_result.hand_handedness):
+    if detection_result.hand_landmarks and detection_result.handedness:
+        for hand_landmarks, handedness in zip(detection_result.hand_landmarks, detection_result.handedness):
             # IndexErrorを防ぐ安全な取り出し方
             hand_type = handedness[0].category_name
             current_detected_hands.append(hand_type)
@@ -121,7 +121,7 @@ while cap.isOpened():
             cc_value = int(features['pinch'] * 127)
             cc_value = max(0, min(127, cc_value))
 
-            # 💡【復活させた1行】音量(手の開き)のMIDI送信
+            # 音量(手の開き)のMIDI送信
             outport.send(mido.Message('control_change', control=7, value=cc_value, channel=state['channel']))
             
             # MIDI信号を送信
