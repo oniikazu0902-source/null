@@ -57,6 +57,8 @@ while cap.isOpened():
     mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=image_rgb)
     detection_result = detector.detect(mp_image)
 
+    hands_on_screen = []
+
     # ==========================================
     # 4. 手の位置から音程を計算してMIDI送信
     # ==========================================
@@ -65,10 +67,6 @@ while cap.isOpened():
         for i, hand_landmarks in enumerate(detection_result.hand_landmarks):
             hand_type = detection_result.hand_handedness[i][0].category_name
             hands_on_screen.append(hand_type)
-
-            # aa
-            wrist = hand_landmarks[0]
-            middle_tip = hand_landmarks[12]
             
             
         # 人差し指の先端（インデックス番号が8番）のY座標を取得
@@ -87,6 +85,8 @@ while cap.isOpened():
             # 手を上にかざす(yが小さい)ほど音が高くなるように計算
             note = int((1.0 - y) * 24) + 60 
             note = max(0, min(127, note))
+
+        channel = 0 if hand_type == 'Right' else 1
         
         # 音程が変わった時だけMIDI信号を送信
         if note != current_notes:
@@ -94,11 +94,12 @@ while cap.isOpened():
                 outport.send(mido.Message('note_off', note=current_notes))
             outport.send(mido.Message('note_on', note=note, velocity=100))
             current_notes = note
-    else:
-        # 手が画面から消えたら音を止める
-        if current_notes is not None:
-             outport.send(mido.Message('note_off', note=current_notes))
-             current_notes = None
+
+    for hand_type in ['Right', 'Left']:
+        if hand_type not in hands_on_screen and current_notes[hand_type] is not None:
+            channel = 0 if hand_type == 'Right' else 1
+            outport.send(mido.Message('note_off', note=current_notes[hand_type], channel=channel))
+            current_notes[hand_type] = None
 
     # ==========================================
     # 5. カメラ映像の表示
@@ -110,7 +111,9 @@ while cap.isOpened():
 # 終了処理
 cap.release()
 cv2.destroyAllWindows()
-if current_notes is not None:
-    outport.send(mido.Message('note_off', note=current_notes))
+for hand_type in ['Right', 'Left']:
+    if current_notes is not None:
+        channel = 0 if hand_type == 'Right' else 1
+        outport.send(mido.Message('note_off', note=current_notes[hand_type], channel=channel))
 outport.close()
 detector.close()
