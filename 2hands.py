@@ -16,10 +16,18 @@ ALLOWED_NOTES = [48, 50, 52, 53, 55, 57, 59, 60]
 
 KEY_PRESETS = {
     'C_major': [48, 50, 52, 53, 55, 57, 59, 60, 62, 64, 65, 67], # ハ長調（C, D, E, F, G, A, B...）
-    'A_minor': [45, 47, 48, 50, 52, 53, 55, 57, 59, 60, 62, 64], # イ短調（A, B, C, D, E, F, G...）
+    'A_minor': [45, 47, 48, 50, 52, 53, 56, 57, 59, 60, 62, 64], # イ短調（A, B, C, D, E, F, G...）
     'G_major': [43, 45, 47, 48, 50, 52, 54, 55, 57, 59, 60, 62]  # ト長調（Fが#する例: 54番）
 }
 CURRENT_KEY = 'C_major'
+
+# =======
+# 検出範囲の設定
+# =======
+Y_MIN_LIMIT = 0.15  # これより上（0.0〜0.15）は無視
+Y_MAX_LIMIT = 0.85  # これより下（0.85〜1.0）は無視
+
+PINCH_THRESHOLD = 0.7  # つまみ判定のしきい値（0.0〜1.0）
 
 # ==========================================
 # わけわからん
@@ -110,33 +118,41 @@ while cap.isOpened():
             # Y座標を取得
             # (一番上が0.0、下が1.0)
             y = features['index_y']
+            y = max(Y_MIN_LIMIT, min(Y_MAX_LIMIT, y))
+            y_scaled = (y - Y_MIN_LIMIT) / (Y_MAX_LIMIT - Y_MIN_LIMIT)
             
             if CHORD_MODE:
                 ALLOWED_NOTES = KEY_PRESETS[CURRENT_KEY]
                 # 和音だけ
                 # Cメジャー
-                index = int((1.0 - y) * len(ALLOWED_NOTES))
+                index = int((1.0 - y_scaled) * len(ALLOWED_NOTES))
                 # 範囲以外を防止する処理
                 index = max(0, min(len(ALLOWED_NOTES) - 1, index))
                 note = ALLOWED_NOTES[index]
             else:
                 # Y座標をMIDIノートナンバー (例: C4(60) ~ C6(84)) に変換
                 # 手を上にかざす(yが小さい)ほど音が高くなるように計算
-                note = int((1.0 - y) * 24) + 60 
+                note = int((1.0 - y_scaled) * 24) + 60 
                 note = max(0, min(127, note))
 
             cc_value = int(features['pinch'] * 127)
             cc_value = max(0, min(127, cc_value))
 
-            # 音量(手の開き)のMIDI送信
             outport.send(mido.Message('control_change', control=7, value=cc_value, channel=state['channel']))
             
-            # MIDI信号を送信
-            if note != state['note']:
+            # つまんでいるかどうかの判定
+            is_pinching = features['pinch'] >= PINCH_THRESHOLD
+
+            if is_pinching:
+                # まだ音が鳴っていない場合のみ
+                if state['note'] is None:
+                    outport.send(mido.Message('note_on', note=note, velocity=100, channel=state['channel']))
+                    state['note'] = note
+            else:
+                # 指を離したら確実に消音
                 if state['note'] is not None:
                     outport.send(mido.Message('note_off', note=state['note'], channel=state['channel']))
-                outport.send(mido.Message('note_on', note=note, velocity=100, channel=state['channel']))
-                state['note'] = note
+                    state['note'] = None
 
     for hand_type in ['Right', 'Left']:
         if hand_type not in current_detected_hands:
@@ -165,6 +181,9 @@ while cap.isOpened():
         elif key == ord('a'):  # 'a'キーでイ短調に
             CURRENT_KEY = 'A_minor'
             print("【切替】イ短調 (A Minor) になりました")
+        elif key == ord('g'):  # 'a'キーでイ短調に
+            CURRENT_KEY = 'G_major'
+            print("【切替】ト長調 (G Major) になりました")
 
 # 終了処理
 cap.release()
